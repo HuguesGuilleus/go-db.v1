@@ -44,9 +44,12 @@ func New(name string, opt ...bitcask.Option) (db *DB) {
 
 // Print the error if the error is not nil and return true.
 // If no error return false.
-func (db *DB) print(err error) bool {
+func (db *DB) print(err error, key []byte) bool {
 	if err != nil {
-		log.Printf("[DB ERROR] %q: %v\n", db.name, err)
+		if len(key) > 20 {
+			key = key[:20]
+		}
+		log.Printf("[DB ERROR] %q <key:%x>: %v\n", db.name, key, err)
 	}
 	return false
 }
@@ -69,18 +72,20 @@ func (db *DB) UnknownS(key string) bool {
 
 // Delete on element
 func (db *DB) Delete(key Key) {
-	db.print(db.intern.Delete(key.bytes()))
+	k := key.bytes()
+	db.print(db.intern.Delete(k), k)
 }
 
 // Delete on element
 func (db *DB) DeleteS(key string) {
-	db.print(db.intern.Delete([]byte(key)))
+	k := []byte(key)
+	db.print(db.intern.Delete(k), k)
 }
 
 // Remove all keys in the DB.
 func (db *DB) DeleteAll() {
 	db.maxIndex = 0
-	db.print(db.intern.DeleteAll())
+	db.print(db.intern.DeleteAll(), nil)
 }
 
 /* GET */
@@ -103,13 +108,15 @@ func (db *DB) parse(key []byte, v interface{}) (noExist bool) {
 
 	// get the value
 	data, err := db.intern.Get(key)
-	if db.print(err) {
+	if err == bitcask.ErrKeyNotFound {
+		return true
+	} else if db.print(err, key) {
 		return true
 	}
 
 	// Decode the value
 	err = gob.NewDecoder(bytes.NewReader(data)).Decode(v)
-	if db.print(err) {
+	if db.print(err, key) {
 		db.intern.Delete(key)
 		return true
 	}
@@ -119,21 +126,23 @@ func (db *DB) parse(key []byte, v interface{}) (noExist bool) {
 
 // Get the value in without decoding with a number key.
 func (db *DB) GetRaw(key Key) []byte {
-	data, err := db.intern.Get(key.bytes())
+	k := key.bytes()
+	data, err := db.intern.Get(k)
 	if err != bitcask.ErrKeyNotFound {
 		return nil
 	}
-	db.print(err)
+	db.print(err, k)
 	return data
 }
 
 // Get the value in without decoding with a string key.
 func (db *DB) GetSRaw(key string) []byte {
-	data, err := db.intern.Get([]byte(key))
+	k := []byte(key)
+	data, err := db.intern.Get(k)
 	if err != bitcask.ErrKeyNotFound {
 		return nil
 	}
-	db.print(err)
+	db.print(err, k)
 	return data
 }
 
@@ -191,14 +200,15 @@ func (db *DB) ForS(prefix string, page, size int, filter func(string) bool, it i
 	}
 
 	for _, key := range all {
-		data, err := db.intern.Get([]byte(key))
-		if db.print(err) {
+		k := []byte(key)
+		data, err := db.intern.Get(k)
+		if db.print(err, k) {
 			continue
 		}
 
 		v.Set(reflect.Zero(v.Type()))
 		err = gob.NewDecoder(bytes.NewReader(data)).DecodeValue(v)
-		if db.print(err) {
+		if db.print(err, k) {
 			continue
 		}
 
@@ -223,18 +233,20 @@ func (db *DB) SetS(key string, v interface{}) {
 // Serialization the value v and save it in the DB.
 func (db *DB) set(k []byte, v interface{}) {
 	w := bytes.Buffer{}
-	if db.print(gob.NewEncoder(&w).Encode(v)) {
+	if db.print(gob.NewEncoder(&w).Encode(v), k) {
 		return
 	}
-	db.print(db.intern.Put(k, w.Bytes()))
+	db.print(db.intern.Put(k, w.Bytes()), k)
 }
 
 // Set with a number key, the value v without serialization.
 func (db *DB) SetRaw(key Key, raw []byte) {
-	db.print(db.intern.Put(key.bytes(), raw))
+	k := key.bytes()
+	db.print(db.intern.Put(k, raw), k)
 }
 
 // Set with a string key, the value v without serialization.
 func (db *DB) SetSRaw(key string, raw []byte) {
-	db.print(db.intern.Put([]byte(key), raw))
+	k := []byte(key)
+	db.print(db.intern.Put(k, raw), k)
 }
