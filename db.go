@@ -128,7 +128,7 @@ func (db *DB) parse(key []byte, v interface{}) (noExist bool) {
 func (db *DB) GetRaw(key Key) []byte {
 	k := key.bytes()
 	data, err := db.intern.Get(k)
-	if err != bitcask.ErrKeyNotFound {
+	if err == bitcask.ErrKeyNotFound {
 		return nil
 	}
 	db.print(err, k)
@@ -139,7 +139,7 @@ func (db *DB) GetRaw(key Key) []byte {
 func (db *DB) GetSRaw(key string) []byte {
 	k := []byte(key)
 	data, err := db.intern.Get(k)
-	if err != bitcask.ErrKeyNotFound {
+	if err == bitcask.ErrKeyNotFound {
 		return nil
 	}
 	db.print(err, k)
